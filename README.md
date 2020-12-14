@@ -88,3 +88,7 @@ type Query {
 ```
 
 This will create a pipeline which executes two dynamodb resolvers one after another. First `Foo`, then `Baz`
+
+## Known Issues / Gotchas
+
+When chaining directives, their order is not necessarily in the order they are written in GraphQL. See this issue for details: https://github.com/aws-amplify/amplify-cli/issues/6176 This is why its important to have the pipeline transformer defined first in `transform.conf.json`. Hopefully this will be fixed soon, and it will allow us to use the `@function` directive with the `@pipeline`
