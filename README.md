@@ -14,8 +14,8 @@ Edit `amplify/backend/api/<YOUR_API>/transform.conf.json` and append the followi
 
 ```json
 "transformers": [
-  "@halftome/amplify-transformers/PipelineTransformer",
-  "@halftome/amplify-transformers/DynamoDBTransformer"
+  "@halftome/amplify-transformers/dist/PipelineTransformer",
+  "@halftome/amplify-transformers/dist/DynamoDBTransformer"
 ]
 ```
 
