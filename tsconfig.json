@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "es2018",
+    "module": "commonjs",
+    "lib": ["es2018"],
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "noImplicitAny": true,
+    "strict": false,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist"]
+}
