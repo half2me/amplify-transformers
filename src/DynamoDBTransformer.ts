@@ -119,7 +119,10 @@ class DynamoDBTransformer extends Transformer {
 
   conf = (table: string, field: string, type: string) => ({
     ApiId: Fn.GetAtt(ResourceConstants.RESOURCES.GraphQLAPILogicalID, "ApiId"),
-    DataSourceName: `${table}Table`, // would prefer to use Fn.GetAtt(ModelResourceIDs.ModelTableDataSourceID(table),"Name"), but it doesn't work for some strange reason
+    DataSourceName: Fn.GetAtt(
+      ModelResourceIDs.ModelTableDataSourceID(table),
+      "Name"
+    ),
     RequestMappingTemplate: print(
       compoundExpression([
         set(
