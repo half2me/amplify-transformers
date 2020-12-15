@@ -1,6 +1,27 @@
-import { Transformer, gql, TransformerContext, InvalidDirectiveError } from 'graphql-transformer-core'
-import { toUpper, ResourceConstants, ModelResourceIDs, ResolverResourceIDs } from 'graphql-transformer-common'
-import { AppSync, Fn } from 'cloudform-types'
+import {
+  Transformer,
+  gql,
+  TransformerContext,
+  InvalidDirectiveError,
+} from "graphql-transformer-core";
+import {
+  obj,
+  str,
+  ref,
+  print,
+  compoundExpression,
+  ifElse,
+  methodCall,
+  toJson,
+  set,
+} from "graphql-mapping-template";
+import {
+  toUpper,
+  ResourceConstants,
+  ModelResourceIDs,
+  ResolverResourceIDs,
+} from "graphql-transformer-common";
+import { AppSync, Fn } from "cloudform-types";
 import {
   ObjectTypeDefinitionNode,
   DirectiveNode,
@@ -8,114 +29,140 @@ import {
   FieldDefinitionNode,
   ArgumentNode,
   valueFromASTUntyped,
-} from 'graphql'
-import { PipelineResolverResourceIDs } from './PipelineResolverResourceIDs'
+} from "graphql";
+import { PipelineResolverResourceIDs } from "./PipelineResolverResourceIDs";
 
-const s3BaseUrl = 's3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/${ResolverFileName}'
-const pipelineStack = 'FunctionDirectiveStack'
+const pipelineStack = "FunctionDirectiveStack";
 
 class DynamoDBTransformer extends Transformer {
   constructor() {
     super(
-      'DynamoDBTransformer',
+      "DynamoDBTransformer",
       // prettier-ignore
       gql`
-        directive @dynamodb(table: String!, name: String, template: DynamoDBResolverTemplateMap) repeatable on FIELD_DEFINITION
-
-        input DynamoDBResolverTemplateMap {
-          request: String
-          response: String
-        }
-      `,
-    )
+        directive @dynamodb(table: String!, name: String) repeatable on FIELD_DEFINITION
+      `
+    );
   }
 
   public field = (
     parent: ObjectTypeDefinitionNode | InterfaceTypeDefinitionNode,
     definition: FieldDefinitionNode,
     directive: DirectiveNode,
-    ctx: TransformerContext,
+    ctx: TransformerContext
   ) => {
-    const isArg = (s: string) => (arg: ArgumentNode) => arg.name.value === s
+    const isArg = (s: string) => (arg: ArgumentNode) => arg.name.value === s;
     const getArg = (arg: string, dflt?: any) => {
-      const argument = directive.arguments.find(isArg(arg))
-      return argument ? valueFromASTUntyped(argument.value) : dflt
-    }
+      const argument = directive.arguments.find(isArg(arg));
+      return argument ? valueFromASTUntyped(argument.value) : dflt;
+    };
 
-    const table = toUpper(getArg('table'))
-    const field = definition.name.value
-    const type = parent.name.value
-    const name = getArg('name')
-    const {
-      request: requestTemplate = `${type}.${field}.req.vtl`,
-      response: responseTemplate = `${type}.${field}.res.vtl`,
-    } = getArg('template', {})
+    const table = toUpper(getArg("table"));
+    const field = definition.name.value;
+    const type = parent.name.value;
+    const name = getArg("name");
 
     // Add a normal resolver
-    const resolverKey = ResolverResourceIDs.ResolverResourceID(type, field)
-    const resolver = ctx.getResource(resolverKey)
+    const resolverKey = ResolverResourceIDs.ResolverResourceID(type, field);
+    const resolver = ctx.getResource(resolverKey);
     if (!resolver) {
       // There is no resolver already configured, lets make a new one
-      ctx.setResource(resolverKey, this.resolver(table, field, type, requestTemplate, responseTemplate))
-      ctx.mapResourceToStack(table, resolverKey)
-    } else if (resolver.Properties.Kind === 'PIPELINE') {
+      ctx.setResource(resolverKey, this.resolver(table, field, type));
+      ctx.mapResourceToStack(table, resolverKey);
+    } else if (resolver.Properties.Kind === "PIPELINE") {
       if (!name) {
-        throw new InvalidDirectiveError('Name must be specified when in pipeline context')
+        throw new InvalidDirectiveError(
+          "Name must be specified when in pipeline context"
+        );
       }
       // We are in a pipeline context, instead of a resolver, we need to add a function to the pipeline
-      const {
-        request: pipelineRequestTemplate = `${type}.${field}.${name}.req.vtl`,
-        response: pipelineResponseTemplate = `${type}.${field}.${name}.res.vtl`,
-      } = getArg('template', {})
 
-      const func = this.func(table, field, type, name, pipelineRequestTemplate, pipelineResponseTemplate)
-      const funcName = PipelineResolverResourceIDs.DynamoDBAppSyncFunctionConfigurationID(field, type, name)
-      ctx.setResource(funcName, func)
-      ctx.mapResourceToStack(pipelineStack, funcName)
-      ctx.setResource(resolverKey, this.appendFunctionToResolver(resolver as AppSync.Resolver, funcName))
+      const func = this.func(table, field, type, name);
+      const funcName = PipelineResolverResourceIDs.DynamoDBAppSyncFunctionConfigurationID(
+        field,
+        type,
+        name
+      );
+      ctx.setResource(funcName, func);
+      ctx.mapResourceToStack(pipelineStack, funcName);
+      ctx.setResource(
+        resolverKey,
+        this.appendFunctionToResolver(resolver as AppSync.Resolver, funcName)
+      );
     }
-  }
+  };
 
-  resolver = (table: string, field: string, type: string, reqTemplate: string, resTemplate: string) => {
+  resolver = (table: string, field: string, type: string): AppSync.Resolver => {
     return new AppSync.Resolver({
-      ...this.conf(table, reqTemplate, resTemplate),
+      ...this.conf(table, field, type),
       FieldName: field,
       TypeName: type,
-    })
-  }
+    });
+  };
 
-  func = (table: string, field: string, type: string, name: string, reqTemplate: string, resTemplate: string) => {
+  func = (
+    table: string,
+    field: string,
+    type: string,
+    name: string
+  ): AppSync.FunctionConfiguration => {
     return new AppSync.FunctionConfiguration({
-      ...this.conf(table, reqTemplate, resTemplate),
-      Name: PipelineResolverResourceIDs.DynamoDBAppSyncFunctionConfigurationID(field, type, name),
-      FunctionVersion: '2018-05-29',
-    }).dependsOn(ModelResourceIDs.ModelTableDataSourceID(table)) // TODO: not sure if we need this bit
-  }
+      ...this.conf(table, field, type),
+      Name: PipelineResolverResourceIDs.DynamoDBAppSyncFunctionConfigurationID(
+        field,
+        type,
+        name
+      ),
+      FunctionVersion: "2018-05-29",
+    });
+  };
 
-  conf = (table: string, reqTemplate: string, resTemplate: string) => ({
-    ApiId: Fn.GetAtt(ResourceConstants.RESOURCES.GraphQLAPILogicalID, 'ApiId'),
-    DataSourceName: Fn.GetAtt(ModelResourceIDs.ModelTableDataSourceID(table), 'Name'),
-    RequestMappingTemplateS3Location: Fn.Sub(s3BaseUrl, {
-      [ResourceConstants.PARAMETERS.S3DeploymentBucket]: Fn.Ref(ResourceConstants.PARAMETERS.S3DeploymentBucket),
-      [ResourceConstants.PARAMETERS.S3DeploymentRootKey]: Fn.Ref(ResourceConstants.PARAMETERS.S3DeploymentRootKey),
-      ResolverFileName: reqTemplate,
-    }),
-    ResponseMappingTemplateS3Location: Fn.Sub(s3BaseUrl, {
-      [ResourceConstants.PARAMETERS.S3DeploymentBucket]: Fn.Ref(ResourceConstants.PARAMETERS.S3DeploymentBucket),
-      [ResourceConstants.PARAMETERS.S3DeploymentRootKey]: Fn.Ref(ResourceConstants.PARAMETERS.S3DeploymentRootKey),
-      ResolverFileName: resTemplate,
-    }),
-  })
+  conf = (table: string, field: string, type: string) => ({
+    ApiId: Fn.GetAtt(ResourceConstants.RESOURCES.GraphQLAPILogicalID, "ApiId"),
+    DataSourceName: Fn.ImportValue(
+      "GetAtt" + ModelResourceIDs.ModelTableDataSourceID(table) + "Name"
+    ),
+    RequestMappingTemplate: print(
+      compoundExpression([
+        set(
+          ref("req"),
+          obj({
+            version: str("2018-05-29"),
+          })
+        ),
+        methodCall(ref("util.error"), str("Template not implemented")),
+        toJson(ref("req")),
+      ])
+    ),
+    ResponseMappingTemplate: print(
+      compoundExpression([
+        ifElse(
+          ref("ctx.error"),
+          methodCall(
+            ref("util.error"),
+            ref("ctx.error.message"),
+            ref("ctx.error.type")
+          ),
+          toJson(ref("ctx.result"))
+        ),
+      ])
+    ),
+  });
 
-  appendFunctionToResolver = (resolver: AppSync.Resolver, functionId: string) => {
+  appendFunctionToResolver = (
+    resolver: AppSync.Resolver,
+    functionId: string
+  ) => {
     if (Array.isArray(resolver.Properties.PipelineConfig.Functions)) {
-      resolver.Properties.PipelineConfig.Functions.push(Fn.GetAtt(functionId, 'FunctionId'))
+      resolver.Properties.PipelineConfig.Functions.push(
+        Fn.GetAtt(functionId, "FunctionId")
+      );
     } else {
-      throw new Error('Unable to add function to resolver')
+      throw new Error("Unable to add function to resolver");
     }
-    return resolver.dependsOn(functionId)
-  }
+    return resolver.dependsOn(functionId);
+  };
 }
 
-export default DynamoDBTransformer
-export { DynamoDBTransformer }
+export default DynamoDBTransformer;
+export { DynamoDBTransformer };
