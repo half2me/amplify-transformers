@@ -119,8 +119,9 @@ class DynamoDBTransformer extends Transformer {
 
   conf = (table: string, field: string, type: string) => ({
     ApiId: Fn.GetAtt(ResourceConstants.RESOURCES.GraphQLAPILogicalID, "ApiId"),
-    DataSourceName: Fn.ImportValue(
-      "GetAtt" + ModelResourceIDs.ModelTableDataSourceID(table) + "Name"
+    DataSourceName: Fn.GetAtt(
+      ModelResourceIDs.ModelTableDataSourceID(table),
+      "Name"
     ),
     RequestMappingTemplate: print(
       compoundExpression([
