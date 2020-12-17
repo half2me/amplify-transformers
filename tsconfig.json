@@ -6,10 +6,12 @@
     "declaration": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "noImplicitAny": true,
-    "strict": false,
-    "forceConsistentCasingInFileNames": true
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist"]
+  "exclude": ["dist", "node_modules"]
 }
