@@ -1,6 +1,6 @@
 {
   "name": "@halftome/amplify-transformers",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "Useful GraphQL transformers for AppSync/Amplify",
   "main": "dist/index.js",
   "scripts": {
